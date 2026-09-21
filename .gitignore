@@ -1,0 +1,10 @@
+# Visual Studio 캐시/설정 (개인 로컬 전용)
+.vs/
+
+# 빌드 결과물
+[Bb]in/
+[Oo]bj/
+
+# 사용자별 설정 파일
+*.user
+*.suo

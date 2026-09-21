@@ -1,0 +1,90 @@
+﻿<Window x:Class="Gantry_Control.View.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Gantry_Control"
+        xmlns:converter="clr-namespace:Gantry_Control.Converter"
+        xmlns:vm="clr-namespace:Gantry_Control.ViewModel"
+        xmlns:panel="clr-namespace:Gantry_Control.View.Panel"
+        mc:Ignorable="d"
+        Title="MainWindow" WindowState="Maximized">
+
+    <Window.Resources>
+        <converter:PercentConverter x:Key="PercentConverter"/>
+        
+        <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+            <panel:HomePanel/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
+            <panel:HistoryPanel/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ManualViewModel}">
+            <panel:ManualControlPanel/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MonitoringViewModel}">
+            <panel:MonitoringPanel/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:TestViewModel}">
+            <panel:TestPanel/>
+        </DataTemplate>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="8*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Image Grid.Column="0" Source="/resource/img/admp_logo.gif"/>
+        </Grid>
+        
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="10*"/>
+            </Grid.ColumnDefinitions>
+
+            <ListBox Grid.Column="0"
+                     x:Name="PanelList"
+                     ItemsSource="{Binding PanelItems}"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     HorizontalContentAlignment="Stretch"
+                     VerticalContentAlignment="Stretch">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Height"
+                                Value="{Binding ElementName=PanelList,
+                                                Path=ActualHeight,
+                                                Converter={StaticResource PercentConverter},
+                                                ConverterParameter=0.15}"/>
+                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="Padding" Value="0"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+
+                        <Button x:Name="PanelButton" Content="{Binding Label}"
+                                Command="{Binding DataContext.ChangePanelCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                CommandParameter="{Binding Page}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                VerticalContentAlignment="Center"
+                                Margin="0"
+                                Padding="0"
+                                FontSize="{Binding ElementName=PanelButton, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.2}"/>
+
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <ContentControl Grid.Column="1" Content="{Binding CurrentViewModel}"/>
+        </Grid>
+    </Grid>
+</Window>
