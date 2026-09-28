@@ -8,31 +8,32 @@ using System.Windows.Data;
 
 namespace Gantry_Control.Converter
 {
-    class PercentConverter : IValueConverter
+    public class PercentConverter : IValueConverter
     {
         public object Convert(
-            object value,
+            object? value,
             Type targetType,
-            object parameter,
+            object? parameter,
             CultureInfo culture)
         {
+            // XAML의 ConverterParameter("0.15")는 OS 로케일과 무관하게 '.' 소수점으로 해석
             if (value is double height &&
                 parameter != null &&
-                double.TryParse(parameter.ToString(), out double percent))
+                double.TryParse(parameter.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double percent))
             {
                 return height * percent;
             }
 
-            return 0;
+            return 0d;
         }
 
         public object ConvertBack(
-            object value,
+            object? value,
             Type targetType,
-            object parameter,
+            object? parameter,
             CultureInfo culture)
         {
-            throw new NotImplementedException();
+            return Binding.DoNothing;
         }
     }
 }
