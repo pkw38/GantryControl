@@ -5,7 +5,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Gantry_Control.View.Panel"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-             mc:Ignorable="d">
+             mc:Ignorable="d"
+             Unloaded="UserControl_Unloaded">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -117,7 +118,9 @@
                                         PreviewMouseUp="DirectionButton_PressEnd"
                                         MouseLeave="DirectionButton_PressEnd"
                                         PreviewTouchDown="DirectionButton_PressStart"
-                                        PreviewTouchUp="DirectionButton_PressEnd">
+                                        PreviewTouchUp="DirectionButton_PressEnd"
+                                        TouchLeave="DirectionButton_PressEnd"
+                                        LostMouseCapture="DirectionButton_PressEnd">
                                     <materialDesign:PackIcon Kind="{Binding Icon}" Style="{StaticResource JogIconStyle}"/>
                                 </Button>
                                 <TextBlock Text="{Binding Direction}"
@@ -162,7 +165,9 @@
                                         PreviewMouseUp="DirectionButton_PressEnd"
                                         MouseLeave="DirectionButton_PressEnd"
                                         PreviewTouchDown="DirectionButton_PressStart"
-                                        PreviewTouchUp="DirectionButton_PressEnd">
+                                        PreviewTouchUp="DirectionButton_PressEnd"
+                                        TouchLeave="DirectionButton_PressEnd"
+                                        LostMouseCapture="DirectionButton_PressEnd">
                                     <materialDesign:PackIcon Kind="{Binding Icon}" Style="{StaticResource JogIconStyle}"/>
                                 </Button>
                                 <TextBlock Text="{Binding Direction}"
@@ -200,7 +205,7 @@
             <Grid Grid.Row="2" x:Name="Home">
                 <TextBlock Text="Home"
                            Style="{StaticResource DirectionLabelStyle}"
-                           FontSize="{Binding ElementName=Speed, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.3}"
+                           FontSize="{Binding ElementName=Home, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.3}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
             </Grid>

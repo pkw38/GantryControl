@@ -39,6 +39,8 @@ namespace Gantry_Control.View.Panel
 
         private void DirectionButton_PressStart(object sender, RoutedEventArgs e)
         {
+            // 좌클릭/터치만 조그 시작 (우클릭, 휠클릭 무시)
+            if (e is MouseButtonEventArgs mouse && mouse.ChangedButton != MouseButton.Left) return;
             if (sender is not Button button || button.DataContext is not ManualViewModel.MoveButton item) return;
             if (item.IsStop || DataContext is not ManualViewModel vm) return;
 
@@ -52,6 +54,11 @@ namespace Gantry_Control.View.Panel
             if (item.IsStop || DataContext is not ManualViewModel vm) return;
 
             vm.DirectionReleaseCommand.Execute(null);
+        }
+
+        private void UserControl_Unloaded(object sender, RoutedEventArgs e)
+        {
+            (DataContext as ManualViewModel)?.StopMotion();
         }
     }
 }

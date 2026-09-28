@@ -1,6 +1,4 @@
 ﻿using Gantry_Control.Service;
-using System.Configuration;
-using System.Data;
 using System.Windows;
 
 namespace Gantry_Control
@@ -11,13 +9,30 @@ namespace Gantry_Control
     public partial class App : Application
     {
         private readonly CancellationTokenSource _appCts = new();
+        private Task? _commTask;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            TcpComm.Instance.Initialize("127.0.0.1", 8999);   // 실제 PLC IP/포트로 교체
-            TcpComm.Instance.RunAsync(_appCts.Token);
+            var settings = CommSettings.Load();
+            TcpComm.Instance.Initialize(settings.Ip, settings.Port);
+            _commTask = TcpComm.Instance.RunAsync(_appCts.Token);
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            // 워커 종료 시 DoFinalize에서 정지 명령 송신 후 연결 종료
+            TcpComm.Instance.StopJog();
+            _appCts.Cancel();
+            try
+            {
+                _commTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (AggregateException) { }
+            _appCts.Dispose();
+
+            base.OnExit(e);
         }
     }
-
 }

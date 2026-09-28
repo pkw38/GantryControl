@@ -2,13 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Gantry_Control.Service;
 using MaterialDesignThemes.Wpf;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Threading;
 
 namespace Gantry_Control.ViewModel
 {
@@ -35,6 +29,9 @@ namespace Gantry_Control.ViewModel
             Down = 6,
         }
 
+        public const int MinSpeed = 0;
+        public const int MaxSpeed = byte.MaxValue;
+
         public ObservableCollection<MoveButton> XYMoveButtonList { get; } = new()
         {
             new() { DirectionKey = "upperleft",     Icon = PackIconKind.None },
@@ -54,27 +51,29 @@ namespace Gantry_Control.ViewModel
             new() { DirectionKey = "down",          Icon = PackIconKind.ArrowDownThick,     Direction = "다운",  ShowDirection = true }
         };
 
-        private readonly DispatcherTimer _moveTimer;
         private bool _isPressActive;
-        private string _selectedDirection = "stop";
-        public byte SetSpeed { get; set; }
-        public int SetHome {  get; set; }
 
-        public ManualViewModel()
+        [ObservableProperty]
+        private int setSpeed;
+
+        public int SetHome { get; set; }
+
+        partial void OnSetSpeedChanged(int value)
         {
-            _moveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-            _moveTimer.Tick += (_, __) => SendMove(_selectedDirection);
+            var clamped = Math.Clamp(value, MinSpeed, MaxSpeed);
+            if (clamped != value)
+            {
+                SetSpeed = clamped;
+            }
         }
 
         [RelayCommand]
         private void DirectionPress(string direction)
         {
-            if (direction == "stop") return;
+            if (TryGetDirection(direction, out var dir) == false || dir == Direction.Stop) return;
 
-            _selectedDirection = direction;
             _isPressActive = true;
-            SendMove(direction);
-            _moveTimer.Start();
+            SendJog(dir);
         }
 
         [RelayCommand]
@@ -82,43 +81,37 @@ namespace Gantry_Control.ViewModel
         {
             if (!_isPressActive) return;
 
-            _moveTimer.Stop();
             _isPressActive = false;
-            SendMove("stop");
+            SendJog(Direction.Stop);
         }
 
-        private void SendMove(string direction)
+        /// <summary>화면 전환, 창 비활성화 등 누름 상태와 무관하게 무조건 정지</summary>
+        public void StopMotion()
         {
-            switch (direction)
+            _isPressActive = false;
+            SendJog(Direction.Stop);
+        }
+
+        private static bool TryGetDirection(string key, out Direction direction)
+        {
+            switch (key)
             {
-                case "stop":
-                    SendJog(Direction.Stop);
-                    break;
-                case "forward":
-                    SendJog(Direction.Forward);
-                    break;
-                case "backward":
-                    SendJog(Direction.Backward);
-                    break;
-                case "left":
-                    SendJog(Direction.Left);
-                    break;
-                case "right":
-                    SendJog(Direction.Right);
-                    break;
-                case "up":
-                    SendJog(Direction.Up);
-                    break;
-                case "down":
-                    SendJog(Direction.Down);
-                    break;
+                case "stop": direction = Direction.Stop; return true;
+                case "forward": direction = Direction.Forward; return true;
+                case "backward": direction = Direction.Backward; return true;
+                case "left": direction = Direction.Left; return true;
+                case "right": direction = Direction.Right; return true;
+                case "up": direction = Direction.Up; return true;
+                case "down": direction = Direction.Down; return true;
+                default: direction = Direction.Stop; return false;
             }
         }
 
         private void SendJog(Direction direction)
         {
-            TcpComm.Instance.SetJog((byte)direction, SetSpeed);
-            TcpComm.Instance.WritePLC();
+            // TcpComm이 매 주기 현재 값을 송신하므로 값만 갱신하면 된다
+            var speed = direction == Direction.Stop ? (byte)0 : (byte)SetSpeed;
+            TcpComm.Instance.SetJog((byte)direction, speed);
         }
     }
 }

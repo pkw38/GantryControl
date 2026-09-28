@@ -51,6 +51,8 @@ namespace Gantry_Control.ViewModel
         [RelayCommand]
         private void ChangePanel(string page)
         {
+            // 조그 버튼을 누른 채 화면을 바꾸면 Release가 오지 않으므로 먼저 정지
+            StopMotion();
             SelectedPanel = page;
 
             CurrentViewModel = page switch
@@ -62,6 +64,18 @@ namespace Gantry_Control.ViewModel
                 "test" => new TestViewModel(),
                 _ => new HomeViewModel()
             };
+        }
+
+        public void StopMotion()
+        {
+            if (CurrentViewModel is ManualViewModel manual)
+            {
+                manual.StopMotion();
+            }
+            else
+            {
+                TcpComm.Instance.StopJog();
+            }
         }
     }
 

@@ -11,8 +11,6 @@
         Title="MainWindow" WindowState="Maximized">
 
     <Window.Resources>
-        <converter:PercentConverter x:Key="PercentConverter"/>
-        
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">
             <panel:HomePanel/>
         </DataTemplate>

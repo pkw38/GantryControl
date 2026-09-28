@@ -22,5 +22,12 @@ namespace Gantry_Control.View
             InitializeComponent();
             DataContext = new MainViewModel();
         }
+
+        protected override void OnDeactivated(EventArgs e)
+        {
+            // Alt+Tab 등으로 포커스를 잃으면 버튼 Release를 받을 수 없으므로 정지
+            (DataContext as MainViewModel)?.StopMotion();
+            base.OnDeactivated(e);
+        }
     }
 }
