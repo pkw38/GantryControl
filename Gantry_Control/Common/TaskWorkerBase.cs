@@ -36,6 +36,10 @@ namespace Gantry_Control.Common
                             WorkRoutine(ct);
                             await WorkRoutineAsync(ct);
                         }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                        {
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             Debug.WriteLine($"[{_name}] Exception Occurred: {ex.Message}");

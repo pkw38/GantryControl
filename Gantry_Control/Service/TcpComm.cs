@@ -1,38 +1,53 @@
 ﻿using Gantry_Control.Common;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Mail;
 using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Threading;
 
 namespace Gantry_Control.Service
 {
-    internal class TcpComm : TaskWorkerBase
+    internal class TcpComm : TaskWorkerBase, IComm
     {
         private static readonly TcpComm _instance = new TcpComm();
         public static TcpComm Instance => _instance;
-        private TcpClient _tcpClient = new TcpClient();
 
-        private string _ip;
+        private const byte Stx = 0x02;
+        private const byte Etx = 0x03;
+        private const int FrameLength = 10;
+        private const int ConnectTimeoutMs = 1000;
+
+        private TcpClient? _tcpClient;
+        private NetworkStream? _stream;
+
+        private string _ip = "127.0.0.1";
         private int _port;
 
-        private readonly object _writeLock = new();
-
-        private byte[] _writeBuffer = new byte[10];
-        private byte[] _readBuffer = new byte[10];
-
+        private readonly object _jogLock = new();
         private byte _jogDirection;
         private byte _jogSpeed;
 
-        public event EventHandler<bool> ConnectionChanged;
+        private readonly byte[] _writeBuffer = new byte[FrameLength];
+        private readonly byte[] _readChunk = new byte[256];
+        private readonly List<byte> _rxBuffer = new();
 
-        public TcpComm() : base("TcpComm", 20) { }
+        private bool _isConnected;
+        public bool IsConnected
+        {
+            get => _isConnected;
+            private set
+            {
+                if (_isConnected == value) return;
+                _isConnected = value;
+                Debug.WriteLine($"[{_name}] Connection {(value ? "established" : "lost")}");
+                ConnectionChanged?.Invoke(this, value);
+            }
+        }
+
+        private int _position;
+        public int Position => Volatile.Read(ref _position);
+
+        public event EventHandler<bool>? ConnectionChanged;
+
+        private TcpComm() : base("TcpComm", 20) { }
 
         public void Initialize(string ip, int port)
         {
@@ -42,118 +57,176 @@ namespace Gantry_Control.Service
 
         public void SetJog(byte direction, byte speed)
         {
-            lock (_writeLock)
+            lock (_jogLock)
             {
                 _jogDirection = direction;
                 _jogSpeed = speed;
             }
         }
 
+        public void StopJog() => SetJog(0, 0);
+
         protected override async Task WorkRoutineAsync(CancellationToken ct)
         {
-            if(_tcpClient.Connected == false)
+            if (IsConnected == false)
             {
-                SafeReconnect();
+                await ReconnectAsync(ct);
+                if (IsConnected == false) return;
             }
 
-            if (_tcpClient.Connected == true) 
+            try
             {
-                if (ReadPLC(ct) == true)
-                {
-                    WritePLC();
-                }
-                else
-                {
-                    _tcpClient.Close();
-                }
+                // 수신 여부와 관계없이 매 주기 현재 조그 명령을 송신 (PLC 측 워치독/하트비트 역할)
+                WritePLC();
+                ReadPLC();
+            }
+            catch (Exception ex) when (ex is IOException || ex is SocketException || ex is ObjectDisposedException)
+            {
+                Debug.WriteLine($"[{_name}] I/O failed: {ex.Message}");
+                CloseConnection();
             }
         }
 
-        private void SafeReconnect()
+        protected override void DoFinalize()
         {
+            // 종료 시 반드시 정지 명령을 한 번 보내고 연결을 닫는다
+            StopJog();
             try
             {
-                var tcpClient = _tcpClient;
-                _tcpClient = new TcpClient();
-                if (tcpClient?.Connected ?? false)
-                {
-                    tcpClient.Close();
-                }
-
-                var tcpCt = new CancellationTokenSource();
-                tcpCt.CancelAfter(1000);
-                _tcpClient.ConnectAsync(_ip, _port, tcpCt.Token).AsTask().Wait();
+                if (IsConnected) WritePLC();
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"[{_name}] Final stop write failed: {ex.Message}");
+            }
+            CloseConnection();
+        }
 
+        private async Task ReconnectAsync(CancellationToken ct)
+        {
+            CloseConnection();
+
+            var client = new TcpClient();
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(ConnectTimeoutMs);
+                await client.ConnectAsync(_ip, _port, timeoutCts.Token);
+
+                client.NoDelay = true;
+                _tcpClient = client;
+                _stream = client.GetStream();
+                _rxBuffer.Clear();
+                IsConnected = true;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                client.Dispose();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                client.Dispose();
+                Debug.WriteLine($"[{_name}] Connect to {_ip}:{_port} failed: {ex.Message}");
             }
         }
 
-        public void WritePLC()
+        private void CloseConnection()
         {
-            try
+            _stream?.Dispose();
+            _stream = null;
+            _tcpClient?.Dispose();
+            _tcpClient = null;
+            IsConnected = false;
+        }
+
+        private void WritePLC()
+        {
+            if (_stream == null) return;
+
+            byte direction, speed;
+            lock (_jogLock)
             {
-                if (_tcpClient.Connected == false)
-                {
-                    return;
-                }
-
-                var stream = _tcpClient.GetStream();
-                if (stream == null || stream.CanWrite == false)
-                {
-                    return;
-                }
-
-                _writeBuffer[0] = 0x02; //stx
-                _writeBuffer[1] = _jogDirection; //jog direction
-                _writeBuffer[2] = _jogSpeed; //jog speed
-                _writeBuffer[3] = 10;
-                _writeBuffer[4] = 10;
-                _writeBuffer[5] = 10;
-                _writeBuffer[6] = 10;
-                _writeBuffer[7] = 10;
-                _writeBuffer[8] = 10;
-                _writeBuffer[9] = 0x03; //etx
-
-                stream.Write(_writeBuffer, 0, _writeBuffer.Length);
-                stream.Flush();
+                direction = _jogDirection;
+                speed = _jogSpeed;
             }
-            catch (Exception ex) { 
-                
+
+            _writeBuffer[0] = Stx;
+            _writeBuffer[1] = direction; //jog direction
+            _writeBuffer[2] = speed;     //jog speed
+            _writeBuffer[3] = 10;        // TODO: 프로토콜 확정 후 실제 데이터로 교체
+            _writeBuffer[4] = 10;
+            _writeBuffer[5] = 10;
+            _writeBuffer[6] = 10;
+            _writeBuffer[7] = 10;
+            _writeBuffer[8] = 10;
+            _writeBuffer[9] = Etx;
+
+            _stream.Write(_writeBuffer, 0, _writeBuffer.Length);
+        }
+
+        private void ReadPLC()
+        {
+            if (_stream == null || _tcpClient == null) return;
+
+            // 읽을 수 있다고 표시되는데 데이터가 0이면 상대가 연결을 끊은 것
+            var socket = _tcpClient.Client;
+            if (socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0)
+            {
+                throw new IOException("Remote host closed the connection");
+            }
+
+            while (_stream.DataAvailable)
+            {
+                int readCount = _stream.Read(_readChunk, 0, _readChunk.Length);
+                if (readCount <= 0)
+                {
+                    throw new IOException("Remote host closed the connection");
+                }
+                _rxBuffer.AddRange(_readChunk.AsSpan(0, readCount));
+            }
+
+            ParseFrames();
+        }
+
+        /// <summary>STX로 시작하고 ETX로 끝나는 고정 길이 프레임을 수신 버퍼에서 추출</summary>
+        private void ParseFrames()
+        {
+            while (true)
+            {
+                int stxIndex = _rxBuffer.IndexOf(Stx);
+                if (stxIndex < 0)
+                {
+                    _rxBuffer.Clear();
+                    return;
+                }
+                if (stxIndex > 0)
+                {
+                    _rxBuffer.RemoveRange(0, stxIndex);
+                }
+                if (_rxBuffer.Count < FrameLength)
+                {
+                    return;
+                }
+                if (_rxBuffer[FrameLength - 1] != Etx)
+                {
+                    // 잘못된 프레임: 현재 STX를 버리고 다음 STX부터 재동기화
+                    _rxBuffer.RemoveAt(0);
+                    continue;
+                }
+
+                var frame = _rxBuffer.GetRange(0, FrameLength);
+                _rxBuffer.RemoveRange(0, FrameLength);
+                HandleFrame(frame);
             }
         }
 
-        private bool ReadPLC(CancellationToken ct)
+        private void HandleFrame(List<byte> frame)
         {
-            try
-            {
-                if ( _tcpClient.Connected == false)
-                {
-                    return false;
-                }
-
-                _tcpClient.ReceiveTimeout = 300;
-                int readCount = _tcpClient.Client.Receive(_readBuffer, _readBuffer.Length, SocketFlags.None);
-
-                var position = (_readBuffer[1] << 8) + _readBuffer[2];
-
-                if (readCount > 0)
-                {
-                    // TODO: 여기서 _readBuffer를 실제 프로토콜에 맞게 파싱
-                    Debug.WriteLine($"수신: {string.Join(",", _readBuffer.Take(readCount))}, position: {position}");
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            catch(Exception ex)
-            {
-                Debug.WriteLine("read fail");
-                return false;
-            }
+            // TODO: 나머지 필드는 실제 프로토콜에 맞게 파싱
+            int position = (frame[1] << 8) + frame[2];
+            Volatile.Write(ref _position, position);
+            Debug.WriteLine($"수신: {string.Join(",", frame)}, position: {position}");
         }
     }
 }

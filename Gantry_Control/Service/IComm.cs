@@ -1,18 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Gantry_Control.Service
+﻿namespace Gantry_Control.Service
 {
     internal interface IComm
     {
-        Task Connect(String ip, int port);
-        void SendManualMove(double x, double y, double angular);
-        void SendManualMoveXY(string x, string y, double linearVelocity);
-        Task WriteData(CancellationToken ct);
+        bool IsConnected { get; }
+        int Position { get; }
 
-        event EventHandler<bool> ConnectionChanged;
+        void Initialize(string ip, int port);
+        void SetJog(byte direction, byte speed);
+        void StopJog();
+        Task RunAsync(CancellationToken ct);
+
+        /// <summary>통신 워커 스레드에서 발생하므로 UI 갱신 시 Dispatcher 사용 필요</summary>
+        event EventHandler<bool>? ConnectionChanged;
     }
 }
