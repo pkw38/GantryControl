@@ -14,6 +14,7 @@ namespace Gantry_Control.Service
         private const byte Etx = 0x03;
         private const int FrameLength = 10;
         private const int ConnectTimeoutMs = 1000;
+        private const int RxTimeoutMs = 300;
 
         private TcpClient? _tcpClient;
         private NetworkStream? _stream;
@@ -28,6 +29,7 @@ namespace Gantry_Control.Service
         private readonly byte[] _writeBuffer = new byte[FrameLength];
         private readonly byte[] _readChunk = new byte[256];
         private readonly List<byte> _rxBuffer = new();
+        private long _lastRxTick;
 
         private bool _isConnected;
         public bool IsConnected
@@ -76,9 +78,18 @@ namespace Gantry_Control.Service
 
             try
             {
-                // 수신 여부와 관계없이 매 주기 현재 조그 명령을 송신 (PLC 측 워치독/하트비트 역할)
-                WritePLC();
-                ReadPLC();
+                // PLC는 한 주기에 1프레임만 읽으므로, 앱이 더 빨리 보내면 PLC 수신 버퍼에 명령이 쌓여 반응이 밀림
+                if (ReadPLC() > 0)
+                {
+                    _lastRxTick = Environment.TickCount64;
+                    WritePLC();
+                }
+                else if (Environment.TickCount64 - _lastRxTick > RxTimeoutMs)
+                {
+                    // PLC가 응답하지 않는 연결은 끊고 재연결
+                    Debug.WriteLine($"[{_name}] No data from PLC for {RxTimeoutMs}ms");
+                    CloseConnection();
+                }
             }
             catch (Exception ex) when (ex is IOException || ex is SocketException || ex is ObjectDisposedException)
             {
@@ -117,6 +128,7 @@ namespace Gantry_Control.Service
                 _tcpClient = client;
                 _stream = client.GetStream();
                 _rxBuffer.Clear();
+                _lastRxTick = Environment.TickCount64;
                 IsConnected = true;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -165,9 +177,10 @@ namespace Gantry_Control.Service
             _stream.Write(_writeBuffer, 0, _writeBuffer.Length);
         }
 
-        private void ReadPLC()
+        /// <returns>이번에 수신한 완전한 프레임 수</returns>
+        private int ReadPLC()
         {
-            if (_stream == null || _tcpClient == null) return;
+            if (_stream == null || _tcpClient == null) return 0;
 
             // 읽을 수 있다고 표시되는데 데이터가 0이면 상대가 연결을 끊은 것
             var socket = _tcpClient.Client;
@@ -186,19 +199,21 @@ namespace Gantry_Control.Service
                 _rxBuffer.AddRange(_readChunk.AsSpan(0, readCount));
             }
 
-            ParseFrames();
+            return ParseFrames();
         }
 
         /// <summary>STX로 시작하고 ETX로 끝나는 고정 길이 프레임을 수신 버퍼에서 추출</summary>
-        private void ParseFrames()
+        /// <returns>추출한 프레임 수</returns>
+        private int ParseFrames()
         {
+            int frameCount = 0;
             while (true)
             {
                 int stxIndex = _rxBuffer.IndexOf(Stx);
                 if (stxIndex < 0)
                 {
                     _rxBuffer.Clear();
-                    return;
+                    return frameCount;
                 }
                 if (stxIndex > 0)
                 {
@@ -206,7 +221,7 @@ namespace Gantry_Control.Service
                 }
                 if (_rxBuffer.Count < FrameLength)
                 {
-                    return;
+                    return frameCount;
                 }
                 if (_rxBuffer[FrameLength - 1] != Etx)
                 {
@@ -218,6 +233,7 @@ namespace Gantry_Control.Service
                 var frame = _rxBuffer.GetRange(0, FrameLength);
                 _rxBuffer.RemoveRange(0, FrameLength);
                 HandleFrame(frame);
+                frameCount++;
             }
         }
 
