@@ -217,9 +217,10 @@ namespace Gantry_Control.Service
         private void HandleFrame(List<byte> frame)
         {
             // TODO: 나머지 필드는 실제 프로토콜에 맞게 파싱
-            int x = (frame[1] << 8) + frame[2];
-            int y = (frame[3] << 8) + frame[4];
-            int z = (frame[5] << 8) + frame[6];
+            // 위치: 부호 있는 2바이트 (상위 바이트 먼저, 1mm 단위)
+            int x = (short)((frame[1] << 8) | frame[2]);
+            int y = (short)((frame[3] << 8) | frame[4]);
+            int z = (short)((frame[5] << 8) | frame[6]);
             byte result = frame[8];     // bit0 = 거부, bit1 = 홈 실행 중, bit2 = 홈 완료, bit3 = 홈 실패
             PlcData.Instance.UpdateStatus(new PlcStatus
             {
