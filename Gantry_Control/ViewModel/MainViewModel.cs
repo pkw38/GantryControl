@@ -74,7 +74,7 @@ namespace Gantry_Control.ViewModel
             }
             else
             {
-                TcpComm.Instance.StopJog();
+                PlcData.Instance.StopJog();
             }
         }
     }

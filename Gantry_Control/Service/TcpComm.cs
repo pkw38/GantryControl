@@ -22,10 +22,6 @@ namespace Gantry_Control.Service
         private string _ip = "127.0.0.1";
         private int _port;
 
-        private readonly object _jogLock = new();
-        private byte _jogDirection;
-        private byte _jogSpeed;
-
         private readonly byte[] _writeBuffer = new byte[FrameLength];
         private readonly byte[] _readChunk = new byte[256];
         private readonly List<byte> _rxBuffer = new();
@@ -44,9 +40,6 @@ namespace Gantry_Control.Service
             }
         }
 
-        private int _position;
-        public int Position => Volatile.Read(ref _position);
-
         public event EventHandler<bool>? ConnectionChanged;
 
         private TcpComm() : base("TcpComm", 20) { }
@@ -56,17 +49,6 @@ namespace Gantry_Control.Service
             _ip = ip;
             _port = port;
         }
-
-        public void SetJog(byte direction, byte speed)
-        {
-            lock (_jogLock)
-            {
-                _jogDirection = direction;
-                _jogSpeed = speed;
-            }
-        }
-
-        public void StopJog() => SetJog(0, 0);
 
         protected override async Task WorkRoutineAsync(CancellationToken ct)
         {
@@ -101,7 +83,7 @@ namespace Gantry_Control.Service
         protected override void DoFinalize()
         {
             // 종료 시 반드시 정지 명령을 한 번 보내고 연결을 닫는다
-            StopJog();
+            PlcData.Instance.StopJog();
             try
             {
                 if (IsConnected) WritePLC();
@@ -156,16 +138,11 @@ namespace Gantry_Control.Service
         {
             if (_stream == null) return;
 
-            byte direction, speed;
-            lock (_jogLock)
-            {
-                direction = _jogDirection;
-                speed = _jogSpeed;
-            }
+            var jog = PlcData.Instance.GetJog();
 
             _writeBuffer[0] = Stx;
-            _writeBuffer[1] = direction; //jog direction
-            _writeBuffer[2] = speed;     //jog speed
+            _writeBuffer[1] = jog.Direction; //jog direction
+            _writeBuffer[2] = jog.Speed;     //jog speed
             _writeBuffer[3] = 10;        // TODO: 프로토콜 확정 후 실제 데이터로 교체
             _writeBuffer[4] = 10;
             _writeBuffer[5] = 10;
@@ -240,9 +217,11 @@ namespace Gantry_Control.Service
         private void HandleFrame(List<byte> frame)
         {
             // TODO: 나머지 필드는 실제 프로토콜에 맞게 파싱
-            int position = (frame[1] << 8) + frame[2];
-            Volatile.Write(ref _position, position);
-            Debug.WriteLine($"수신: {string.Join(",", frame)}, position: {position}");
+            int x = (frame[1] << 8) + frame[2];
+            int y = (frame[3] << 8) + frame[4];
+            int z = (frame[5] << 8) + frame[6];
+            PlcData.Instance.SetPosition(x, y, z);
+            Debug.WriteLine($"수신: {string.Join(",", frame)}, position: {x}");
         }
     }
 }

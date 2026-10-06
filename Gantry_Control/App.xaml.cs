@@ -23,7 +23,7 @@ namespace Gantry_Control
         protected override void OnExit(ExitEventArgs e)
         {
             // 워커 종료 시 DoFinalize에서 정지 명령 송신 후 연결 종료
-            TcpComm.Instance.StopJog();
+            PlcData.Instance.StopJog();
             _appCts.Cancel();
             try
             {

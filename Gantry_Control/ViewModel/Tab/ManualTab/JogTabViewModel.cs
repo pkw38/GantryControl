@@ -111,9 +111,9 @@ namespace Gantry_Control.ViewModel.Tab.ManualTab
 
         private void SendJog(Direction direction)
         {
-            // TcpComm이 매 주기 현재 값을 송신하므로 값만 갱신하면 된다
+            // TcpComm이 매 주기 PlcData의 현재 값을 송신하므로 값만 갱신하면 된다
             var speed = direction == Direction.Stop ? (byte)0 : (byte)SetSpeed;
-            TcpComm.Instance.SetJog((byte)direction, speed);
+            PlcData.Instance.SetJog((byte)direction, speed);
         }
     }
 }
