@@ -58,7 +58,10 @@ namespace Gantry_Control.ViewModel.Tab.ManualTab
         [ObservableProperty]
         private int setSpeed;
 
-        public int SetHome { get; set; }
+        private const int CommandTimeoutMs = 1000;
+
+        [ObservableProperty]
+        private string homeMessage = string.Empty;
 
         partial void OnSetSpeedChanged(int value)
         {
@@ -87,6 +90,48 @@ namespace Gantry_Control.ViewModel.Tab.ManualTab
             SendJog(Direction.Stop);
         }
 
+        [RelayCommand]
+        private async Task Home()
+        {
+            // 연결이 끊긴 동안에는 명령을 보내지 않음 (재연결 시 의도치 않게 실행되는 것 방지)
+            if (TcpComm.Instance.IsConnected == false)
+            {
+                HomeMessage = "PLC 연결 안 됨";
+                return;
+            }
+
+            HomeMessage = "홈 실행 중...";
+            var seq = PlcData.Instance.SendCommand(PlcData.CmdHome);
+
+            // PLC가 이 번호를 받았다고 회신(AckSeq)한 뒤의 결과 비트만 본다.
+            // 완료/실패 비트는 다음 홈 명령까지 유지되므로 번호가 맞기 전의 값은 이전 명령의 결과임
+            var deadline = Environment.TickCount64 + CommandTimeoutMs;
+            while (Environment.TickCount64 < deadline)
+            {
+                var status = PlcData.Instance.Status;
+                if (status.AckSeq == seq)
+                {
+                    if (status.CmdRejected)
+                    {
+                        HomeMessage = "홈 거부 (동작 중)";
+                        return;
+                    }
+                    if (status.HomeError)
+                    {
+                        HomeMessage = "홈 실패";
+                        return;
+                    }
+                    if (status.HomeDone)
+                    {
+                        HomeMessage = "홈 완료";
+                        return;
+                    }
+                }
+                await Task.Delay(20);
+            }
+            HomeMessage = "홈 응답 없음";
+        }
+
         /// <summary>화면 전환, 창 비활성화 등 누름 상태와 무관하게 무조건 정지</summary>
         public override void StopMotion()
         {
@@ -113,7 +158,7 @@ namespace Gantry_Control.ViewModel.Tab.ManualTab
         {
             // TcpComm이 매 주기 PlcData의 현재 값을 송신하므로 값만 갱신하면 된다
             var speed = direction == Direction.Stop ? (byte)0 : (byte)SetSpeed;
-            PlcData.Instance.SetJog((byte)direction, speed);
+            PlcData.Instance.UpdateCommand(c => c with { JogDirection = (byte)direction, JogSpeed = speed });
         }
     }
 }

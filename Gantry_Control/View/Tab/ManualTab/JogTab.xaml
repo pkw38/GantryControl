@@ -208,6 +208,10 @@
                            FontSize="{Binding ElementName=Home, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.3}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding HomeMessage}"
+                           FontSize="{Binding ElementName=Home, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.1}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Bottom"/>
             </Grid>
             <Grid Grid.Row="3" x:Name="HomeValue">
                 <Grid>
@@ -215,11 +219,7 @@
                         <ColumnDefinition/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0" FontSize="{Binding ElementName=HomeValue, Path=ActualHeight, Converter={StaticResource PercentConverter}, ConverterParameter=0.3}"
-                             Text="{Binding SetHome, UpdateSourceTrigger=PropertyChanged}"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center"/>
-                    <Button Grid.Column="1"></Button>
+                    <Button Grid.Column="1" Content="Home" Command="{Binding HomeCommand}"/>
                 </Grid>
             </Grid>
         </Grid>

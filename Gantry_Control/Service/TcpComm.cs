@@ -138,13 +138,13 @@ namespace Gantry_Control.Service
         {
             if (_stream == null) return;
 
-            var jog = PlcData.Instance.GetJog();
+            var cmd = PlcData.Instance.Command;
 
             _writeBuffer[0] = Stx;
-            _writeBuffer[1] = jog.Direction; //jog direction
-            _writeBuffer[2] = jog.Speed;     //jog speed
-            _writeBuffer[3] = 10;        // TODO: 프로토콜 확정 후 실제 데이터로 교체
-            _writeBuffer[4] = 10;
+            _writeBuffer[1] = cmd.JogDirection; //jog direction
+            _writeBuffer[2] = cmd.JogSpeed;     //jog speed
+            _writeBuffer[3] = cmd.CmdCode;      //1회성 명령 코드
+            _writeBuffer[4] = cmd.CmdSeq;       //1회성 명령 번호
             _writeBuffer[5] = 10;
             _writeBuffer[6] = 10;
             _writeBuffer[7] = 10;
@@ -220,7 +220,18 @@ namespace Gantry_Control.Service
             int x = (frame[1] << 8) + frame[2];
             int y = (frame[3] << 8) + frame[4];
             int z = (frame[5] << 8) + frame[6];
-            PlcData.Instance.SetPosition(x, y, z);
+            byte result = frame[8];     // bit0 = 거부, bit1 = 홈 실행 중, bit2 = 홈 완료, bit3 = 홈 실패
+            PlcData.Instance.UpdateStatus(new PlcStatus
+            {
+                X = x,
+                Y = y,
+                Z = z,
+                AckSeq = frame[7],
+                CmdRejected = (result & 0x01) != 0,
+                HomeBusy = (result & 0x02) != 0,
+                HomeDone = (result & 0x04) != 0,
+                HomeError = (result & 0x08) != 0,
+            });
             Debug.WriteLine($"수신: {string.Join(",", frame)}, position: {x}");
         }
     }
